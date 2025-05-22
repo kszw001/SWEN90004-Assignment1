@@ -1,0 +1,63 @@
+// Constants
+const N = 4							// station number
+range INDEX = 0..N-1				// station index
+
+// Producer
+PRODUCER = (produce -> TRY_LOAD),	// create a new cart, and then wait for enter elevator
+TRY_LOAD = (enter_elevator_top -> PRODUCER | wait -> TRY_LOAD). // enter in elevator when the elevator is empty and at top
+
+// Elevator
+// Check the position of the elevator. When on the top, and empty, cart can enter the elevator, and then go down to the bottom. When at the bottom and empty, cart can enter the elevator, and the go up to the top.
+ELEVATOR = EMPTY_TOP,																// default
+EMPTY_TOP = (enter_elevator_top -> FULL_TOP | operator_down -> EMPTY_BOTTOM), 		// actions when at the top and the elevator is empty
+FULL_TOP = (down -> FULL_BOTTOM),													// levator going down
+FULL_BOTTOM = (leave_elevator_bottom -> EMPTY_BOTTOM),								// leave the elevator
+EMPTY_BOTTOM = (enter_elevator_bottom -> FULL_BOTTOM_UP | operator_up -> EMPTY_TOP),	// actions when at the bottom and the elevator is empty
+FULL_BOTTOM_UP = (up -> FULL_TOP_RISE),												// elevator going up
+FULL_TOP_RISE = (leave_elevator_top -> CONSUMER),									// cart leave the elevator
+CONSUMER = (depart -> EMPTY_TOP).													// Finished!!!!
+
+// Operator
+OPERATOR = (operator_down -> OPERATOR | operator_up -> OPERATOR).		// An operatpr is contorll the elevator when it's empty
+
+//MINER
+MINER = (mine -> mining -> place_gem -> MINER).							// mining the gem
+
+//ENGINE
+ENGINE = (collect -> deliver -> ENGINE).                               	// move the cart form elevator to station, station to station, and station to elevator
+
+// Station
+STATION = EMPTY_EMPTY,																	// default state, no cart and no gem.
+EMPTY_EMPTY = (mine -> DELAY_GEM_NO_CART | enter_cart -> CART_EMPTY),					// when no cart in station, cart can enter the station, and miner and mining the gem when there is no gem in station
+CART_EMPTY = (mine -> DELAY_GEM_WITH_CART),												// mine
+DELAY_GEM_NO_CART = (mining -> PLACE_GEM_WAIT | enter_cart -> DELAY_GEM_WITH_CART),		// waiting for mining
+PLACE_GEM_WAIT = (place_gem -> EMPTY_GEM | enter_cart -> WAIT_GEM_INTO_CART),			// place gem in station
+WAIT_GEM_INTO_CART = (place_gem -> CART_GEM_RAW),										// place gem in station
+DELAY_GEM_WITH_CART = (mining -> place_gem -> CART_GEM_RAW),							// mining and place gem in station
+EMPTY_GEM = (enter_cart -> CART_GEM_RAW),												// cart enter
+CART_GEM_RAW = (place_into_cart -> CART_READY),											// from station place gem into cart	
+CART_READY = (leave_cart -> EMPTY_EMPTY).												// cart leave station to go to the next station when the next station have no cart
+
+// Main
+// Because this system is to big, more than 20 million states, I don't why, so I divided the system into two parts.
+//|| SYSTEM_OUTSIDE = (PRODUCER || OPERATOR || ELEVATOR).                   		
+//|| SYSTEM_INSIDE = (station[INDEX]:STATION || engine[0..N-2]:ENGINE || miner[INDEX]:MINER))/{forall[i:0..N-2] {station[i].enter_cart / engine[i].collect},
+//	forall[i:1..N-1] {station[i].leave_cart / engine[i].deliver},
+//	station[0].enter_cart / leave_elevator_bottom,
+//	station[3].leave_cart / enter_elevator_bottom}.
+
+|| SYSTEM = (PRODUCER || OPERATOR || ELEVATOR || station[INDEX]:STATION || engine[0..N-2]:ENGINE || miner[INDEX]:MINER)/{
+	forall[i:0..N-2] {station[i].enter_cart / engine[i].collect},
+	forall[i:1..N-1] {station[i].leave_cart / engine[i].deliver},
+	station[0].enter_cart / leave_elevator_bottom,
+	station[N-1].leave_cart / enter_elevator_bottom}.
+
+// Safety check
+property SAFE_ELEVATOR = (enter_elevator_top -> down -> leave_elevator_bottom -> leave_cart[0] -> enter_cart[1] -> leave_cart[1] -> enter_cart[2] -> leave_cart[2] -> enter_cart[3] -> enter_elevator_bottom -> up -> leave_elevator_top -> depart -> SAFE_ELEVATOR).
+property SAFE_CART = (enter_cart -> leave_cart -> SAFE_CART).
+||CHECK = (
+//	SYSTEM_OUTSIDE
+//	|| SYSTEM_INSIDE
+//	|| SYSTEM
+	|| SAFE_ELEVATOR
+	|| SAFE_CART).

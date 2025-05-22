@@ -1,0 +1,68 @@
+// Constants
+const N = 4							// station number
+range INDEX = 0..N-1				// station index
+// Cart state
+const CART = 1						// True
+const NOCART = 0					// False
+range CARTBOOL = NOCART..CART
+// Gem state
+const GEM = 1						// True
+const NOGEM = 0						// False
+range GEMBOOL = NOGEM..GEM
+// Elevator position
+const TOP = 1						// True
+const BOTTOM = 0 					// False
+range ELEVATORBOOL = BOTTOM..TOP
+
+//Producer
+PRODUCER = (produce -> PRODUCER).	// create a new cart
+
+//Consumer
+CONSUMER = (depart -> CONSUMER).	// Finished
+
+//Operator
+OPERATOR = (operator_down -> OPERATOR | operator_up -> OPERATOR).		// An operatpr is contorll the elevator when it's empty
+
+//Miner
+MINER = (mine -> MINER).												// mining the gem
+
+//Engine
+ENGINE = (collect -> deliver -> ENGINE).								// move the cart form station to station
+FIRSTENGINE = (leave_elevator -> firstDeliver -> FIRSTENGINE).			// move the cart form elevator to station
+LASTENGINE = (enter_elevator -> elevatorDeliver -> LASTENGINE).			// move the cart form station to elevator
+
+//Elevator
+ELEVATOR = ELEVATOR[TOP][NOCART],												// default state, elevator at top and no cart
+ELEVATOR[i:ELEVATORBOOL][j:CARTBOOL] = (
+	when(i == NOCART && j == TOP) down-> ELEVATOR[BOTTOM][j]					// when nocart and top, elevator going down
+	| when(i == NOCART && j == BOTTOM) elevatorDeliver -> ELEVATOR[i][CART]		// when nocart and bottom, cart enter in elevator
+	| when(i == NOCART && j == BOTTOM) up -> ELEVATOR[TOP][j]					// when nocart and bottom, elevator going up
+	| when(i == NOCART && j == TOP) arrive -> ELEVATOR[BOTTOM][CART]
+	| when(i == CART && j == BOTTOM) depart -> ELEVATOR[TOP][NOCART]
+	| when(i == CART && j == BOTTOM) elevatorCollect -> ELEVATOR[i][NOCART]).
+
+//STATION
+STATION = STATION[NOCART][NOGEM],
+STATION[i:CARTBOOL][j:GEMBOOL] = (
+	when(i == CART && j == GEM) collect -> STATION[NOCART][NOGEM]
+	| when(i == NOCART) deliver -> STATION[CART][j]
+	| when(j == NOGEM) mine -> STATION[i][GEM]
+).
+
+//MAIN
+||STATIONS = (
+    station[0..N]:STATION
+  || engine[INDEX]:ENGINE
+)/{
+	forall[i:0..N-2] {station[i].collect/ engine[i].collect},
+	forall[i:1..N-1] {station[i].deliver / engine[i].deliver},
+	station[0].deliver / leave_elevator,
+	station[3].collect / enter_elevator
+ }.
+||MINERS = (miner[0..N]:MINER).
+||SYSTEM = (PRODUCER || CONSUMER || OPERATOR || STATIONS || ELEVATOR||FIRSTENGINE||LASTENGINE).
+
+//Safety
+property SAFE_ELEVATOR = (arrive -> leave_elevator -> firstDeliver -> deliver -> enter_elevator -> elevatorDeliver -> up -> depart -> SAFE_ELEVATOR).
+property SAFE_CART = (deliver -> collect -> SAFE_CART).
+||CHECK = (SYSTEM || SAFE_ELEVATOR || SAFE_CART).
